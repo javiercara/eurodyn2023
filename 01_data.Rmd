@@ -1,0 +1,126 @@
+---
+title: "Simulating the data"
+output:
+  html_document:
+    df_print: paged
+---
+
+
+We are going to find the system response (acceleration) using the discrete state space model. The system response is given by:
+
+$$
+\ddot{z}(t) + 2\zeta_1 \omega_1 \dot{z}(t) + \omega_1^2 z(t) = F(t)
+$$
+
+where *z(t)* is the position of the system at time *t*; $\omega_1$ is the natural frequency of vibration; $\zeta_1$ is the damping ratio; 
+
+```{r}
+# Natural frequency of vibration (Hz)
+f1 = 4
+# Natural frequency of vibration (rad/s)
+w1 = 2*pi*f1
+# Damping ratio
+z1 = 0.02
+```
+
+*F(t)* is the force. We consider *F(t)* is a Gaussian random process $F(t_k) \sim N(0,H)$:
+
+```{r}
+# Number of time steps
+nt = 1000
+# Sampling time step (sec)
+dt = 0.05
+# time vector
+tt = (0:(nt-1))*dt
+# Force
+set.seed(123)
+H = 1 # variance of Fk
+Fk = rnorm(nt, mean = 0, sd = sqrt(H))
+plot(tt, Fk, type = "l")
+```
+
+The dynamic equation can be written is state space form:
+
+$$
+\dot{x}(t) = A_c \cdot x(t) + B_c \cdot F(t)
+$$
+In discrete time, this equation is written as ($k = 1,2,\cdots,nt$):
+
+$$
+x_{k+1} = A \cdot x_k + B \cdot F_k
+$$
+
+$$
+A = exp(A_c \cdot dt)
+$$
+
+```{r}
+# A matrix
+Ac = matrix(c(0, 1,-w1^2, -2*z1*w1), nrow = 2, byrow = T)
+A1 = Matrix::expm(Ac*dt)
+(A = matrix(A1@x, nrow = 2))
+```
+
+$$
+B = (A - I) \cdot A_c^{-1} \cdot B_c
+$$
+
+```{r}
+# B matrix
+Bc = matrix(c(0, 1), nrow = 2)
+B = (A - diag(2)) %*% solve(Ac) %*% Bc
+```
+
+Now we can compute the discrete states:
+
+```{r}
+xk = matrix(0.0, nrow = 2, ncol = nt)
+for (r in 1:(nt-1)){
+  xk[,r+1] = A %*% xk[,r] + B %*% Fk[r]
+}
+```
+
+The system output, accelerations in this case, are found by mean of:
+
+$$
+y_k = \ddot{z}_k = C x_k + F_k
+$$
+
+```{r}
+# C matrix
+C = matrix(c(-w1^2, -2*z1*w1), nrow = 1)
+
+# output
+y = C %*% xk + Fk
+
+# as vector
+y = as.vector(y)
+
+plot(tt, y, type = "l")
+```
+
+We add noise $e_k \sim N(0,E)$:
+
+```{r}
+E = 0.01*var(y) # the standard deviation of the noise is 10% of the standard deviation of the noise-free response
+y = y + rnorm(nt, mean = 0, sd = sqrt(E))
+plot(tt, y, type = "l")
+```
+
+```{r}
+fs = 1/dt
+ff = (0:(nt-1))*(fs/nt)
+yw = fft(y)
+plot(ff,abs(yw), type = "l", xlim = c(0,fs/2))
+```
+
+
+Finally, we save the system output:
+
+```{r}
+# write.table(y, file = "simula.txt", col.names = F, row.names = F, sep = ",")
+```
+
+
+
+

@@ -1,0 +1,257 @@
+---
+title: "Bayesian Inference using Stan"
+output: html_document
+date: "June 2023"
+---
+
+Given a set of measurements 
+
+\begin{equation}
+Y = \{y_1, y_2, \ldots, y_N\}
+\end{equation}
+
+the objective is to estimate the parameters $\theta = \{f, \zeta, E, H \}$. In Bayesian inference this is done in a probabilistic framework, that is, we consider these parameters are random variables. Therefore, having observe $Y$ the task is to obtain the posterior distribution of $\theta$.  Applying the Bayes' rule:
+
+\begin{equation}
+p(\theta|Y) = \frac{p(Y|\theta) p(\theta) }{p(Y)}
+\end{equation}
+
+where $p(\cdot)$ represents a generic probability density function (PDF):
+
+* $p(Y|\theta)$ is known as the likelihood.
+* $p(\theta)$ is the prior distribution of the parameters. 
+* $p(Y)$ is the PDF of the data.
+
+In the next sections we describe each element of this Equation.
+
+## The state space model
+
+We work with the state space model:
+
+$$
+x_{k+1} = A x_k + w_k \\
+y_k = Cx_k + v_k \\
+\begin{bmatrix}
+w_k \\
+v_k
+\end{bmatrix}
+\sim N \left(
+\begin{bmatrix}
+0 \\
+0
+\end{bmatrix}
+,
+\begin{bmatrix}
+Q & S \\
+S^T & R
+\end{bmatrix}
+\right)
+$$
+
+
+## The data $Y$
+
+The data comes from a vibrating system with equation of motion given by:
+
+\begin{equation}
+\ddot{z}(t) + 2 \zeta \omega \dot{z}(t) + \omega^2 z(t) = F(t)
+\end{equation}
+
+where $z(t)$ is the position of the system at time $t$; $\omega = 2 \pi f$ is the natural frequency of vibration ($\omega$ in rad/s, $f$ in Hertz); $F(t)$ is the force that causes the vibrations. This equation can be written is state-space form (for more details see the [manuscript](javiercara_eurodyn2023.pdf)):
+
+\begin{equation}
+A = exp(A_c \Delta t), \quad 
+A_c
+=
+\begin{bmatrix}
+0 & 1 \\
+-\omega^2 & -2 \zeta \omega
+\end{bmatrix}
+\end{equation}
+
+\begin{equation}
+C
+=
+\begin{bmatrix}
+-\omega^2 & -2 \zeta \omega
+\end{bmatrix}
+\end{equation}
+
+\begin{equation}
+w_k = B F_k, \quad 
+F_k \sim N(0,H), \quad
+B = (A - I_2) A_c^{-1} B_c, \quad
+B_c = [0 \quad 1]'
+\end{equation}
+
+\begin{equation}
+v_k = F_k + e_k, \quad 
+e_k \sim N(0,E)
+\end{equation}
+
+\begin{equation}
+Q = BHB', \quad S = BH, \quad R = H+E
+\end{equation}
+
+We consider acceleration data obtained from a simulated system with $f = 4$ Hz, $\zeta$ = 0.02, $H$ = 1 N$^2$; the square root of $E$ is 10% of the standard deviation of the noise-free response. The time step used to generate the data is $\Delta t=$ 0.05 s., and the number of data points is N = 1000. The data is generated in this [file](01_data.html), and can be read it from [simula.txt](simula.txt).
+
+```{r}
+y0 = read.table("simula.txt", sep=",", col.names = "")
+y = y0$X # must be a vector
+dt = 0.05
+#
+nt = length(y)
+tt = 0:(nt-1)*dt
+plot(tt, y, type = "l")
+```
+
+## The likelihood $p(Y|\theta)$
+
+The starting point is the state space model. For this model, the likelihood is computed using the Kalman filter. First, we are going to define:
+
+\begin{equation}
+x_{k|k-1} = E[x_k|y_1,\ldots,y_{k-1}]
+\end{equation}
+
+\begin{equation}
+P_{k|k-1} = E[(x_k-x_{k|k-1})(x_k-x_{k|k-1})^T|y_1,\ldots,y_{k-1}]
+\end{equation}
+
+The Kalman filter is an algorithm to update the value of $x_{k|k-1}$ and $P_{k|k-1}$ when a new value of $y_k$ is available:
+
+**The Kalman filter**
+
+Given $x_{1|0}$ and $P_{1|0}$, for $k=1,2,\ldots,N$
+
+\begin{equation}
+x_{k+1|k} = A x_{k|k-1} + K_k \epsilon_{k}
+\end{equation}
+
+\begin{equation}
+P_{k+1|k} = A P_{k|k-1} A^T + Q - K_k \Sigma_{k} K_k^T
+\end{equation}
+
+where
+
+\begin{equation}
+\epsilon_{k} = y_{k} - C x_{k|k-1}
+\end{equation}
+
+\begin{equation}
+\Sigma_{k} = C P_{k|k-1} C^T + R
+\end{equation}
+
+\begin{equation}
+K_{k} = (A P_{k|k-1} C^T + S) \Sigma_{k}^{-1}
+\end{equation}
+
+
+The likelihood is computed using the innovations $\epsilon_{k}$. When the system force $F_k$ and the noise $e_k$ are Gaussian processes, the innovations also follow a Normal distribution:
+
+\begin{equation}
+\epsilon_{k} \sim N(0,\Sigma_{k}).
+\end{equation}
+
+Hence we may write the logarithm of the likelihood as:
+
+\begin{equation}
+p(Y|\theta) = -\frac{1}{2} N \log(2\pi) -\frac{1}{2} \sum_{k=1}^{N} \log |\Sigma_k| - \frac{1}{2} \sum_{k=1}^{N} \epsilon_k^2 \Sigma_k^{-1}.
+\end{equation}
+
+The Stan functions for computing the likelihood are:
+
+* **kfilter_logL()**. The function for the Kalman filter.
+* **ssm2_lpdf()**. This function finds the log-probability density function. It uses the **kfilter_logL()**.
+
+All the Stan functions are included in the file [ssm2.stan](ssm2.stan).
+
+
+## Prior distributions $p(\theta)$
+
+In this work we consider the parameters are independent random variables, so:
+
+\begin{equation}
+p(\theta) = p(f) p(\zeta) p(H) p(E).
+\end{equation}
+
+We use the following distributions:
+
+* $p(f)$: normal distribution.
+* $p(\zeta)$: beta distribution.
+* $p(H)$: half-Cauchy distribution.
+* $p(E)$: half-Cauchy distribution.
+
+```{r}
+# plot or prior distributions
+library(latex2exp)
+
+par(mfrow = c(2,2))
+curve(dnorm(x,4,1), from = 0, to = 8, xlab = "f", ylab = "p(f)", main = "N(4,1)" )
+curve(dbeta(x,2,50), from = 0, to = 0.20, xlab = TeX(r'($\zeta$)'), ylab = TeX(r'(p($\zeta$))'), main = "beta(2,50)" )
+curve(dcauchy(x,0,5), from = 0, to = 10, xlab = "H", ylab = "p(H)", main = "half-Cauchy(0,5)" )
+curve(dcauchy(x,0,5), from = 0, to = 10, xlab = "E", ylab = "p(E)", main = "half-Cauchy(0,5)" )
+```
+
+
+## Posterior distribution $p(\theta|Y)$
+
+The posterior distribution of the parameters is found using Stan. 
+
+```{r warning=FALSE}
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+```
+
+First, we define the data for the Stan functions. It must be a list:
+
+```{r}
+d = list(y=y, nt=length(y), nx = 2, ny = 1, dt = dt, 
+         m1 = matrix(0, nrow = 2, ncol = 1),
+         P1 = matrix(0, nrow = 2, ncol = 2))
+```
+
+```{r eval=FALSE, include=TRUE}
+# we use only one chain and 1000 iterations
+m1 = stan(file="ssm2.stan", data=d, seed=123, cores = 2, chains = 1, warmup = 1000, iter = 5000)
+save("m1", file = "ssm2.RData" )
+```
+
+## Results
+
+In case you don't want to run the iterations you can load "ssm2.RData":
+
+```{r warning=FALSE}
+# in case you don't want to run the iterations you can load 
+load("ssm2.RData")
+```
+
+The means and standard deviations of the posterior
+
+```{r}
+m1s = summary(m1)
+round(m1s$summary[1:4,1:8], 4)
+```
+
+
+We extract samples from the fitted Stan model:
+
+```{r}
+m_samples = extract(m1, permuted = F, pars = c("f", "z"))
+```
+
+Now we can plot the histograms of the posterior dis
+
+```{r}
+ff = as.vector(m_samples[,,1])
+hist(ff, freq = F, xlab = "freq (Hz)", main = "Histogram of f|Y", ylim = c(0,30))
+```
+
+```{r}
+zz = as.vector(m_samples[,,2])
+hist(zz, freq = F, xlab = "z (Hz)", main = "Histogram of z|Y", ylim = c(0,120))
+```
+
+
+
+

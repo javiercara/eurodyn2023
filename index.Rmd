@@ -1,0 +1,23 @@
+---
+title: "Bayesian Operational Modal Analysis in Time Domain using Stan (and the state space model)"
+author: "Javier Cara"
+date: "June 2023"
+output:
+  html_document:
+    df_print: paged
+---
+
+These notes have been prepared as complementary material for the the [paper](javiercara_eurodyn2023.pdf) I presented at   [Eurodyn2023](https://eurodyn2023.dryfta.com/) conference. The purpose of the work is to apply Bayesian methods to estimate the modal parameters of a vibrating system. In my opinion, the interest of this work is double:
+
+* for structural engineers: the approach to time domain Bayesian operational modal analysis using the state space model and Stan is new. 
+* for statisticians: the [Stan language](https://jrnold.github.io/ssmodels-in-stan/) is very popular. The Stan documentation includes many examples, but for the case of the state space model, the documentation is very limited. Two nice examples are:
+    * (https://statmodeling.stat.columbia.edu/2019/04/15/state-space-models-in-stan/)
+    * (https://jrnold.github.io/ssmodels-in-stan/)
+
+This work includes the R and Stan scripts I used to obtain the results for the conference manuscript:
+
+* [01_data.html](01_data.html): Simulation of the time series of vibration data. They are saved to [this file](simula.txt).
+* [02_bayes_stan.html](02_bayes.html): Application of Stan to estimate the modal parameters using the state space model.
+
+
+

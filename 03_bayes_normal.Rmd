@@ -1,0 +1,84 @@
+---
+title: "Bayesian Inference using the Normal approximation"
+output: html_document
+date: "June 2023"
+---
+
+
+In this section, we are going to discuss how the normal distribution can be used to approximate the Bayesian posterior distribution.  
+
+Let's called $\hat{\theta}$ the mode of the posterior distribution $P(Y|\theta)$. The Taylor expansion of $P(Y|\theta)$ up to the quadratic term of the log posterior density centered at $\hat{\theta}$ is:
+
+\begin{equation}
+log (p(\theta|Y)) \approx log (p(\hat{\theta}|Y)) + G(\hat{\theta})^T (\theta - \hat{\theta}) + \frac{1}{2} (\theta - \hat{\theta})^T H(\hat{\theta}) (\theta - \hat{\theta})
+\end{equation}
+
+where $G(\hat{\theta})$ is the gradient of $log (p(\theta|Y))$ evaluated at $\hat{\theta}$, $H(\hat{\theta})$ is the Hessian of $log (p(\theta|Y))$ evaluated at $\hat{\theta}$. Since $\hat{\theta}$ is the mode of the distribution, the gradient $G(\hat{\theta})$ is equal to zero. Therefore:
+
+\begin{equation}
+log (p(\theta|Y)) \approx log (p(\hat{\theta}|Y)) + \frac{1}{2} (\theta - \hat{\theta})^T H(\hat{\theta}) (\theta - \hat{\theta}) \Rightarrow
+\end{equation}
+
+\begin{equation}
+p(\theta|Y) \approx exp \left(const + \frac{1}{2} (\theta - \hat{\theta})^T H(\hat{\theta}) (\theta - \hat{\theta}) \right) \Rightarrow
+\end{equation}
+
+\begin{equation}
+p(\theta|Y) \approx N(\hat{\theta}, - H(\hat{\theta})^{-1})
+\end{equation}
+
+To apply this approximation we need to find the mode of the posterior density, $\hat{\theta}$. Due to the complexity of the posterior distribution we have to use a numerical optimization algorithm. In this work we have used the BFGS algorithm. The objective function is obtained from the Bayes Equation:
+
+\begin{equation}
+p(\theta|Y) = \frac{p(Y|\theta) p(\theta) }{p(Y)} \Rightarrow
+log[p(\theta|Y)] = log[p(Y|\theta)] + log[p(\theta)] - log[p(Y)]
+\end{equation}
+
+The term $log[p(Y)]$ does not depend of $\theta$, so the mode of $log[p(\theta|Y)]$ coincides with the mode of:
+
+\begin{equation}
+f(\theta) = log[p(Y|\theta)] + log[p(\theta)].
+\end{equation}
+
+It is important to remark that $log[p(Y|\theta)]$ is computed using the Kalman filter, Property \ref{prop:kalman_filter}.  On the other hand, $log[p(\theta)]$ is computed using Section \ref{sec:prior}. The results are shown in Table \ref{tab:normal_approx}. We can check that the agreement with Table \ref{tab:posterior} is quite good.
+
+
+
+
+
+```{r eval=FALSE, include=TRUE}
+# we use only one chain and 1000 iterations
+m1 = stan(file="ssm2.stan", data=d, seed=123, cores = 2, chains = 1, warmup = 1000, iter = 5000)
+save("m1", file = "ssm2.RData" )
+```
+
+## Results
+
+In case you don't want to run the iterations you can load "ssm2.RData":
+
+```{r warning=FALSE}
+# in case you don't want to run the iterations you can load 
+load("ssm2.RData")
+```
+
+We extract samples from the fitted Stan model:
+
+```{r}
+m_samples = rstan::extract(m1, permuted = F, pars = c("f", "z"))
+```
+
+Now we can plot the histograms of the posterior dis
+
+```{r}
+ff = as.vector(m_samples[,,1])
+hist(ff, freq = F, xlab = "freq (Hz)", main = "Histogram of f|Y", ylim = c(0,30))
+```
+
+```{r}
+zz = as.vector(m_samples[,,2])
+hist(zz, freq = F, xlab = "z (Hz)", main = "Histogram of z|Y", ylim = c(0,120))
+```
+
+
+
+
